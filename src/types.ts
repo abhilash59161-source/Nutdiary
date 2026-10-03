@@ -126,3 +126,27 @@ export interface WeeklyRationResponse {
   rationTips: string[];
 }
 
+export interface SmartFoodSuggestion {
+  id: string;
+  name: string;
+  mealType: "breakfast" | "lunch" | "dinner" | "snack";
+  portion: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber?: number;
+  goalFit: string;
+  whyRecommended: string;
+  ingredients: string[];
+  prepTimeMinutes?: number;
+  tags?: string[];
+}
+
+export interface SmartSuggestionsResponse {
+  summary: string;
+  targetDailyCalories: number;
+  remainingCalories?: number;
+  suggestions: SmartFoodSuggestion[];
+}
+

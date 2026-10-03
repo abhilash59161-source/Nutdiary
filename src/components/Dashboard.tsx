@@ -27,7 +27,13 @@ import {
   Zap,
   Check,
   Share2,
-  FileText
+  FileText,
+  Watch,
+  Footprints,
+  Heart,
+  RefreshCw,
+  Activity as ActivityIcon,
+  ChevronRight
 } from "lucide-react";
 import { 
   ResponsiveContainer, 
@@ -44,6 +50,15 @@ import {
 } from "recharts";
 import { FoodItem, UserProfile } from "../types.js";
 import ShareProgressModal from "./ShareProgressModal.tsx";
+import WearableSyncModal from "./WearableSyncModal.tsx";
+import { 
+  getDailyWearableData, 
+  getWearableSettings, 
+  syncWearableData, 
+  WearableDailyData, 
+  WearableSettings, 
+  WEARABLE_PROVIDERS_CONFIG 
+} from "../services/wearableService.js";
 
 interface DashboardProps {
   foodLogs: FoodItem[];
@@ -51,6 +66,8 @@ interface DashboardProps {
   selectedDate: string;
   onSetSelectedDate: (date: string) => void;
   onOpenExportReport?: () => void;
+  onNavigateToSuggestions?: () => void;
+  onNavigateToLogger?: () => void;
 }
 
 export default function Dashboard({
@@ -59,6 +76,8 @@ export default function Dashboard({
   selectedDate,
   onSetSelectedDate,
   onOpenExportReport,
+  onNavigateToSuggestions,
+  onNavigateToLogger,
 }: DashboardProps) {
   // Hydration Goal in glasses (1 glass = 250ml)
   const [hydrationGoal, setHydrationGoal] = useState<number>(() => {
@@ -76,11 +95,30 @@ export default function Dashboard({
   const [badgeFilter, setBadgeFilter] = useState<"all" | "unlocked" | "progress">("all");
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
 
-  // Keep water cups synced when selectedDate changes
+  // Fitness Wearables Integration State (Apple Health / Google Fit)
+  const [wearableSettings, setWearableSettings] = useState<WearableSettings>(() => getWearableSettings());
+  const [wearableData, setWearableData] = useState<WearableDailyData>(() => getDailyWearableData(selectedDate));
+  const [showWearableModal, setShowWearableModal] = useState<boolean>(false);
+  const [isSyncingWearable, setIsSyncingWearable] = useState<boolean>(false);
+
+  // Keep water cups & wearable data synced when selectedDate changes
   useEffect(() => {
     const saved = localStorage.getItem(`water_${selectedDate}`);
     setWaterCups(saved ? parseInt(saved, 10) : 0);
+    setWearableData(getDailyWearableData(selectedDate));
   }, [selectedDate]);
+
+  const handleQuickSyncWearable = async () => {
+    setIsSyncingWearable(true);
+    try {
+      const updated = await syncWearableData(selectedDate, wearableSettings.connectedProvider || "apple_health");
+      setWearableData(updated);
+    } catch (e) {
+      console.error("Wearable sync error:", e);
+    } finally {
+      setIsSyncingWearable(false);
+    }
+  };
 
   const handleWaterChange = (amount: number) => {
     const next = Math.max(0, waterCups + amount);
@@ -105,8 +143,18 @@ export default function Dashboard({
   const totalCarbs = todayLogs.reduce((sum, log) => sum + log.carbs * log.servingAmount, 0);
   const totalFat = todayLogs.reduce((sum, log) => sum + log.fat * log.servingAmount, 0);
 
+  // Wearable Active Calorie Calculations
+  const activeCaloriesBurned = wearableSettings.connectedProvider ? wearableData.activeCaloriesBurned : 0;
+  const netCalories = Math.max(0, totalCalories - activeCaloriesBurned);
+  const adjustedTargetCalories = wearableSettings.adjustCalorieBudgetWithBurn
+    ? profile.targetCalories + activeCaloriesBurned
+    : profile.targetCalories;
+
+  const calPercent = Math.min(100, Math.round((totalCalories / adjustedTargetCalories) * 100)) || 0;
+  const netCalPercent = Math.min(100, Math.round((netCalories / profile.targetCalories) * 100)) || 0;
+  const remainingCalories = Math.max(0, adjustedTargetCalories - totalCalories);
+
   // Percentages against target
-  const calPercent = Math.min(100, Math.round((totalCalories / profile.targetCalories) * 100)) || 0;
   const proteinPercent = Math.min(100, Math.round((totalProtein / profile.targetProtein) * 100)) || 0;
   const carbsPercent = Math.min(100, Math.round((totalCarbs / profile.targetCarbs) * 100)) || 0;
   const fatPercent = Math.min(100, Math.round((totalFat / profile.targetFat) * 100)) || 0;
@@ -139,17 +187,25 @@ export default function Dashboard({
     const carbs = Math.round(dayLogs.reduce((sum, log) => sum + log.carbs * log.servingAmount, 0));
     const fat = Math.round(dayLogs.reduce((sum, log) => sum + log.fat * log.servingAmount, 0));
 
+    // Wearable metrics for each day
+    const dayWearable = getDailyWearableData(dayStr);
+    const dayBurn = wearableSettings.connectedProvider ? dayWearable.activeCaloriesBurned : 0;
+    const dayAdjustedTarget = wearableSettings.adjustCalorieBudgetWithBurn ? profile.targetCalories + dayBurn : profile.targetCalories;
+
     return {
       dayStr,
       dayName,
       fullDate,
       label,
       calories: cals,
+      activeBurn: dayBurn,
+      netCalories: Math.max(0, cals - dayBurn),
       targetCalories: profile.targetCalories,
+      adjustedTarget: dayAdjustedTarget,
       protein,
       carbs,
       fat,
-      diff: cals - profile.targetCalories,
+      diff: cals - dayAdjustedTarget,
     };
   });
 
@@ -323,6 +379,14 @@ export default function Dashboard({
             <Share2 className="h-4 w-4" />
             <span>Share Progress</span>
           </button>
+          <button
+            onClick={() => setShowWearableModal(true)}
+            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-sm font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+            title="Manage Apple Health / Google Fit sync"
+          >
+            <Watch className="h-4 w-4 text-rose-600" />
+            <span>{activeCaloriesBurned > 0 ? `-${activeCaloriesBurned} kcal Active` : "Wearable Sync"}</span>
+          </button>
           {onOpenExportReport && (
             <button
               onClick={onOpenExportReport}
@@ -336,18 +400,84 @@ export default function Dashboard({
         </div>
       </div>
 
+      {/* Fitness Wearable Activity Bar (Apple Health / Google Fit) */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white p-5 rounded-3xl border border-slate-700/80 shadow-md flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="h-12 w-12 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center text-2xl shadow-inner shrink-0">
+            {WEARABLE_PROVIDERS_CONFIG[wearableSettings.connectedProvider || "apple_health"].icon}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-extrabold text-white">
+                {WEARABLE_PROVIDERS_CONFIG[wearableSettings.connectedProvider || "apple_health"].name} Active Sync
+              </span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 mr-1 animate-pulse" />
+                Connected
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Expended <strong className="text-rose-400">-{wearableData.activeCaloriesBurned} kcal</strong> active energy across {wearableData.steps.toLocaleString()} steps ({wearableData.distanceKm} km).
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+          <div className="hidden sm:flex items-center gap-3 bg-white/5 px-3 py-1.5 rounded-xl border border-white/10 text-xs">
+            <div className="text-center">
+              <span className="text-[10px] text-slate-400 block uppercase tracking-wider">Steps</span>
+              <span className="font-black text-white">{wearableData.steps.toLocaleString()}</span>
+            </div>
+            <span className="text-slate-600">|</span>
+            <div className="text-center">
+              <span className="text-[10px] text-slate-400 block uppercase tracking-wider">Workout</span>
+              <span className="font-black text-white">{wearableData.activeWorkoutMinutes}m</span>
+            </div>
+            <span className="text-slate-600">|</span>
+            <div className="text-center">
+              <span className="text-[10px] text-slate-400 block uppercase tracking-wider">Avg HR</span>
+              <span className="font-black text-white">{wearableData.avgHeartRateBpm} bpm</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleQuickSyncWearable}
+            disabled={isSyncingWearable}
+            className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+            title="Perform live synchronization with wearable device"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isSyncingWearable ? "animate-spin" : ""}`} />
+            <span>{isSyncingWearable ? "Syncing..." : "Sync Wearable"}</span>
+          </button>
+
+          <button
+            onClick={() => setShowWearableModal(true)}
+            className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-white/15"
+          >
+            <Watch className="h-3.5 w-3.5 text-pink-300" />
+            <span>Manage Devices & Workouts</span>
+          </button>
+        </div>
+      </div>
+
       {/* Main Stats Bento Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Caloric Intake Circle */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col items-center justify-between min-h-[300px]">
-          <div className="w-full">
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col items-center justify-between min-h-[340px]">
+          <div className="w-full flex justify-between items-center">
             <h3 className="text-sm font-semibold text-slate-500 flex items-center gap-1.5 uppercase tracking-wider">
               <Flame className="h-4 w-4 text-orange-500" />
-              Calories Today
+              Caloric Balance Today
             </h3>
+            {activeCaloriesBurned > 0 && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-100 flex items-center gap-1">
+                <span>{WEARABLE_PROVIDERS_CONFIG[wearableSettings.connectedProvider || "apple_health"].icon}</span>
+                <span>-{activeCaloriesBurned} kcal</span>
+              </span>
+            )}
           </div>
 
-          <div className="relative flex items-center justify-center my-4">
+          <div className="relative flex items-center justify-center my-3">
             {/* SVG Progress Ring */}
             <svg className="w-40 h-40 transform -rotate-90">
               {/* Outer background ring */}
@@ -374,18 +504,42 @@ export default function Dashboard({
             </svg>
             <div className="absolute text-center">
               <span className="text-3xl font-extrabold text-slate-800">{Math.round(totalCalories)}</span>
-              <p className="text-xs text-slate-400 mt-0.5">/ {profile.targetCalories} kcal</p>
-              <span className={`inline-block mt-2 px-2 py-0.5 text-[10px] font-bold rounded-full ${calPercent > 100 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                {calPercent}% of limit
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {wearableSettings.adjustCalorieBudgetWithBurn ? (
+                  <span>/ {adjustedTargetCalories} kcal target</span>
+                ) : (
+                  <span>/ {profile.targetCalories} kcal</span>
+                )}
+              </p>
+              <span className={`inline-block mt-1 px-2 py-0.5 text-[10px] font-bold rounded-full ${calPercent > 100 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                {calPercent}% of budget
               </span>
             </div>
           </div>
 
-          <div className="w-full text-center text-xs text-slate-500">
-            {totalCalories < profile.targetCalories ? (
-              <p>You have <strong className="text-emerald-600">{Math.round(profile.targetCalories - totalCalories)} kcal</strong> remaining for today.</p>
+          {/* Caloric Expenditure Ledger Breakdown */}
+          <div className="w-full space-y-1.5 pt-2 border-t border-slate-100 text-xs">
+            <div className="flex justify-between items-center text-slate-600">
+              <span>🍽️ Food Consumed:</span>
+              <span className="font-bold text-slate-800">+{Math.round(totalCalories)} kcal</span>
+            </div>
+            {activeCaloriesBurned > 0 && (
+              <div className="flex justify-between items-center text-rose-600">
+                <span>🔥 Wearable Active Burn:</span>
+                <span className="font-bold">-{activeCaloriesBurned} kcal</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center font-bold text-slate-800 pt-1 border-t border-slate-100">
+              <span className="text-slate-600">Net Calorie Intake:</span>
+              <span className="text-emerald-700 font-extrabold">{Math.round(netCalories)} kcal</span>
+            </div>
+          </div>
+
+          <div className="w-full text-center text-xs text-slate-500 pt-1">
+            {remainingCalories > 0 ? (
+              <p>You have <strong className="text-emerald-600">{Math.round(remainingCalories)} kcal</strong> remaining in your adjusted budget.</p>
             ) : (
-              <p className="text-red-500 font-medium">Caloric target exceeded by {Math.round(totalCalories - profile.targetCalories)} kcal!</p>
+              <p className="text-red-500 font-medium">Caloric budget exceeded by {Math.round(totalCalories - adjustedTargetCalories)} kcal!</p>
             )}
           </div>
         </div>
@@ -636,6 +790,34 @@ export default function Dashboard({
         </div>
       </div>
 
+      {/* SMART FOOD SUGGESTIONS PROACTIVE BANNER */}
+      {onNavigateToSuggestions && (
+        <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-indigo-950 text-white rounded-3xl p-6 shadow-md border border-slate-700/80 flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
+          <div className="space-y-1.5 z-10">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold uppercase tracking-wider border border-emerald-400/30">
+              <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+              Smart Food Suggestions
+            </div>
+            <h3 className="text-lg sm:text-xl font-black text-white tracking-tight">
+              What to eat next to hit your daily macro targets?
+            </h3>
+            <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
+              Based on your remaining budget ({Math.round(remainingCalories)} kcal, {Math.round(Math.max(0, profile.targetProtein - totalProtein))}g protein), get clinical food suggestions for Breakfast, Lunch, and Dinner.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 z-10 flex-shrink-0">
+            <button
+              onClick={onNavigateToSuggestions}
+              className="px-5 py-3 bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-500 hover:to-teal-600 active:scale-95 text-slate-950 font-black text-xs sm:text-sm rounded-2xl shadow-lg shadow-emerald-900/30 transition-all flex items-center gap-2"
+            >
+              <span>Explore Smart Suggestions</span>
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* NUTRITIONAL BADGES & ACHIEVEMENTS SECTION */}
       <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-5" id="nutritional-badges-section">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
@@ -858,6 +1040,15 @@ export default function Dashboard({
                             </span>
                             <span className="font-extrabold text-white text-sm">{data.calories} kcal</span>
                           </div>
+                          {data.activeBurn > 0 && (
+                            <div className="flex justify-between items-center text-rose-300 text-[11px]">
+                              <span className="flex items-center gap-1.5">
+                                <Watch className="h-3.5 w-3.5 text-rose-400" />
+                                Active Burn:
+                              </span>
+                              <span className="font-bold">-{data.activeBurn} kcal</span>
+                            </div>
+                          )}
                           <div className="flex justify-between items-center text-[11px]">
                             <span className="text-slate-400 flex items-center gap-1.5">
                               <Target className="h-3.5 w-3.5 text-slate-400" />
@@ -901,6 +1092,15 @@ export default function Dashboard({
                 fillOpacity={1} 
                 fill="url(#weeklyCalorieGradient)"
                 activeDot={{ r: 6, fill: '#10b981', stroke: '#ffffff', strokeWidth: 2 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="activeBurn"
+                name="Active Burn"
+                stroke="#f43f5e"
+                strokeWidth={2}
+                strokeDasharray="4 4"
+                dot={{ r: 3, fill: '#f43f5e' }}
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -989,6 +1189,18 @@ export default function Dashboard({
           badges={badges}
           unlockedCount={unlockedCount}
           onClose={() => setShowShareModal(false)}
+        />
+      )}
+
+      {/* WEARABLE SYNC MODAL */}
+      {showWearableModal && (
+        <WearableSyncModal
+          selectedDate={selectedDate}
+          wearableData={wearableData}
+          settings={wearableSettings}
+          onUpdateData={(newData) => setWearableData(newData)}
+          onUpdateSettings={(newSettings) => setWearableSettings(newSettings)}
+          onClose={() => setShowWearableModal(false)}
         />
       )}
     </div>

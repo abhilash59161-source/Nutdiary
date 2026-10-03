@@ -15,7 +15,8 @@ import {
   DownloadCloud,
   Bell,
   ShoppingCart,
-  FileText
+  FileText,
+  ChefHat
 } from "lucide-react";
 import { FoodItem, UserProfile } from "./types.js";
 import Dashboard from "./components/Dashboard.tsx";
@@ -24,6 +25,8 @@ import PhotoRecognition from "./components/PhotoRecognition.tsx";
 import Recommendations from "./components/Recommendations.tsx";
 import TherapeuticDiets from "./components/TherapeuticDiets.tsx";
 import GroceryList from "./components/GroceryList.tsx";
+import RecipeFinder from "./components/RecipeFinder.tsx";
+import SmartFoodSuggestions from "./components/SmartFoodSuggestions.tsx";
 import ExportReportModal from "./components/ExportReportModal.tsx";
 import OnboardingModal from "./components/OnboardingModal.tsx";
 import InstallGuideModal from "./components/InstallGuideModal.tsx";
@@ -44,7 +47,7 @@ const DEFAULT_PROFILE: UserProfile = {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "logger" | "photo" | "recommendations" | "disease" | "grocery">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "logger" | "photo" | "recommendations" | "disease" | "grocery" | "recipes" | "suggestions">("dashboard");
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     return new Date().toISOString().split("T")[0];
   });
@@ -201,6 +204,30 @@ export default function App() {
                 <ShoppingCart className="h-4 w-4" />
                 Grocery List
               </button>
+
+              <button
+                onClick={() => setActiveTab("recipes")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === "recipes"
+                    ? "bg-emerald-500 text-white shadow-sm shadow-emerald-100"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/50"
+                }`}
+              >
+                <ChefHat className="h-4 w-4" />
+                Recipe Finder
+              </button>
+
+              <button
+                onClick={() => setActiveTab("suggestions")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === "suggestions"
+                    ? "bg-emerald-500 text-white shadow-sm shadow-emerald-100"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/50"
+                }`}
+              >
+                <Sparkles className="h-4 w-4" />
+                Smart Food
+              </button>
             </nav>
 
             {/* Offline Install Guide, Export & Reminders */}
@@ -306,6 +333,26 @@ export default function App() {
           >
             Grocery List
           </button>
+          <button
+            onClick={() => setActiveTab("recipes")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex-shrink-0 transition-all ${
+              activeTab === "recipes"
+                ? "bg-emerald-500 text-white"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            }`}
+          >
+            Recipes
+          </button>
+          <button
+            onClick={() => setActiveTab("suggestions")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex-shrink-0 transition-all ${
+              activeTab === "suggestions"
+                ? "bg-emerald-500 text-white"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            }`}
+          >
+            Smart Food
+          </button>
 
           <button
             onClick={() => setShowExportReport(true)}
@@ -344,16 +391,19 @@ export default function App() {
             selectedDate={selectedDate}
             onSetSelectedDate={setSelectedDate}
             onOpenExportReport={() => setShowExportReport(true)}
+            onNavigateToSuggestions={() => setActiveTab("suggestions")}
           />
         )}
 
         {activeTab === "logger" && (
           <FoodLogger
             foodLogs={foodLogs}
+            profile={profile}
             onAddLog={handleAddLog}
             onDeleteLog={handleDeleteLog}
             selectedDate={selectedDate}
             initialMealType={preselectedMeal}
+            onNavigateToGroceries={() => setActiveTab("grocery")}
           />
         )}
 
@@ -379,6 +429,25 @@ export default function App() {
           <GroceryList
             profile={profile}
             foodLogs={foodLogs}
+            onNavigateToRecipes={() => setActiveTab("recipes")}
+          />
+        )}
+
+        {activeTab === "recipes" && (
+          <RecipeFinder
+            profile={profile}
+            onAddLog={handleAddLog}
+            onNavigateToGrocery={() => setActiveTab("grocery")}
+          />
+        )}
+
+        {activeTab === "suggestions" && (
+          <SmartFoodSuggestions
+            profile={profile}
+            foodLogs={foodLogs}
+            selectedDate={selectedDate}
+            onAddLog={handleAddLog}
+            onNavigateToGroceries={() => setActiveTab("grocery")}
           />
         )}
 

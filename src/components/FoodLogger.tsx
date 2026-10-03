@@ -16,22 +16,29 @@ import {
   Layers,
   ChevronRight
 } from "lucide-react";
-import { FoodItem, SearchResult } from "../types.js";
+import { FoodItem, SearchResult, UserProfile } from "../types.js";
+import SmartFoodSuggestions from "./SmartFoodSuggestions.tsx";
 
 interface FoodLoggerProps {
   foodLogs: FoodItem[];
+  profile?: UserProfile;
   onAddLog: (item: Omit<FoodItem, "id">) => void;
   onDeleteLog: (id: string) => void;
   selectedDate: string;
   initialMealType?: "breakfast" | "lunch" | "dinner" | "snack";
+  initialSubTab?: "search" | "manual" | "explore" | "suggestions";
+  onNavigateToGroceries?: () => void;
 }
 
 export default function FoodLogger({
   foodLogs,
+  profile,
   onAddLog,
   onDeleteLog,
   selectedDate,
   initialMealType,
+  initialSubTab,
+  onNavigateToGroceries,
 }: FoodLoggerProps) {
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -59,7 +66,9 @@ export default function FoodLogger({
     }
   }, [initialMealType]);
   const [portionMultiplier, setPortionMultiplier] = useState(1);
-  const [activeTab, setActiveTab] = useState<"search" | "manual" | "explore">("search");
+  const [activeTab, setActiveTab] = useState<"search" | "manual" | "explore" | "suggestions">(
+    initialSubTab || "search"
+  );
 
   // Local directory catalog loaded from backend
   const [healthyCatalog, setHealthyCatalog] = useState<any[]>([]);
@@ -195,13 +204,13 @@ export default function FoodLogger({
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8" id="food-logger-tab">
       
       {/* LEFT COLUMN: Food Input Panel (Search/Manual/Explore) */}
-      <div className="lg:col-span-7 space-y-6">
+      <div className={`${activeTab === "suggestions" ? "lg:col-span-7 xl:col-span-8" : "lg:col-span-7"} space-y-6`}>
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           {/* Sub Tab headers */}
-          <div className="flex border-b border-slate-100 bg-slate-50/50">
+          <div className="flex border-b border-slate-100 bg-slate-50/50 overflow-x-auto">
             <button
               onClick={() => setActiveTab("search")}
-              className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
+              className={`flex-1 min-w-[120px] py-3 text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
                 activeTab === "search"
                   ? "border-emerald-500 text-emerald-600 bg-white"
                   : "border-transparent text-slate-500 hover:text-slate-800"
@@ -212,7 +221,7 @@ export default function FoodLogger({
             </button>
             <button
               onClick={() => setActiveTab("manual")}
-              className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
+              className={`flex-1 min-w-[120px] py-3 text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
                 activeTab === "manual"
                   ? "border-emerald-500 text-emerald-600 bg-white"
                   : "border-transparent text-slate-500 hover:text-slate-800"
@@ -223,7 +232,7 @@ export default function FoodLogger({
             </button>
             <button
               onClick={() => setActiveTab("explore")}
-              className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
+              className={`flex-1 min-w-[120px] py-3 text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
                 activeTab === "explore"
                   ? "border-emerald-500 text-emerald-600 bg-white"
                   : "border-transparent text-slate-500 hover:text-slate-800"
@@ -231,6 +240,18 @@ export default function FoodLogger({
             >
               <Layers className="h-4 w-4" />
               Healthy Directory
+            </button>
+            <button
+              onClick={() => setActiveTab("suggestions")}
+              className={`flex-1 min-w-[140px] py-3 text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
+                activeTab === "suggestions"
+                  ? "border-emerald-500 text-emerald-600 bg-white font-bold"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <Sparkles className="h-4 w-4 text-emerald-500" />
+              <span>Smart Suggestions</span>
+              <span className="hidden xl:inline text-[9px] px-1.5 py-0.5 bg-emerald-100 text-emerald-800 font-extrabold rounded-full">AI</span>
             </button>
           </div>
 
@@ -570,12 +591,49 @@ export default function FoodLogger({
                 </div>
               </div>
             )}
+
+            {/* 4. SMART FOOD SUGGESTIONS TAB */}
+            {activeTab === "suggestions" && (
+              <div>
+                {profile ? (
+                  <SmartFoodSuggestions
+                    profile={profile}
+                    foodLogs={foodLogs}
+                    selectedDate={selectedDate}
+                    onAddLog={onAddLog}
+                    onNavigateToGroceries={onNavigateToGroceries}
+                    defaultMealType={targetMeal}
+                  />
+                ) : (
+                  <div className="p-8 text-center text-slate-500 text-xs">
+                    Please configure your user profile to get customized smart food recommendations.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Small Discovery Banner on Search & Manual Tabs */}
+        {(activeTab === "search" || activeTab === "manual") && (
+          <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 text-emerald-900">
+              <Sparkles className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+              <span>Looking for breakfast, lunch, or dinner foods to hit your exact macro goals?</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab("suggestions")}
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow-xs flex-shrink-0"
+            >
+              Smart Suggestions →
+            </button>
+          </div>
+        )}
       </div>
 
       {/* RIGHT COLUMN: Food Journal / Log Display */}
-      <div className="lg:col-span-5 space-y-6">
+      <div className={`${activeTab === "suggestions" ? "lg:col-span-5 xl:col-span-4" : "lg:col-span-5"} space-y-6`}>
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-6">
           <div className="flex justify-between items-center pb-2 border-b border-slate-100">
             <h3 className="text-md font-extrabold text-slate-800 flex items-center gap-1.5">

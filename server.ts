@@ -15,6 +15,8 @@ import {
   getDiseaseDietPlan,
   getFamilyPlanRecommendations,
   getWeeklyRationPlan,
+  findRecipesFromGroceries,
+  getSmartFoodSuggestions,
 } from "./server/geminiService.js";
 
 // Load environment variables
@@ -212,6 +214,60 @@ app.post("/api/weekly-ration", async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error.message || "An error occurred while building the weekly rations.",
+    });
+  }
+});
+
+/**
+ * Recipe Finder: Suggest quick, healthy recipes using existing grocery list items
+ */
+app.post("/api/recipes/find", async (req: Request, res: Response) => {
+  try {
+    const { groceryItems, mealType, maxTimeMinutes, dietaryGoal, userGoal } = req.body;
+    const result = await findRecipesFromGroceries({
+      groceryItems: groceryItems || [],
+      mealType,
+      maxTimeMinutes,
+      dietaryGoal,
+      userGoal,
+    });
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    console.error("Recipe Finder API Error:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "An error occurred while finding recipes.",
+    });
+  }
+});
+
+/**
+ * Smart Food Suggestions: Recommend specific foods for breakfast, lunch, and dinner
+ * tailored to user's nutritional profile and daily calorie/macro goals
+ */
+app.post("/api/smart-suggestions", async (req: Request, res: Response) => {
+  try {
+    const { profile, remainingCalories, remainingProtein, remainingCarbs, remainingFat, mealType, preferenceFilter, queryCraving } = req.body;
+    if (!profile) {
+      return res.status(400).json({ success: false, error: "User profile data is required" });
+    }
+
+    const result = await getSmartFoodSuggestions({
+      profile,
+      remainingCalories,
+      remainingProtein,
+      remainingCarbs,
+      remainingFat,
+      mealType,
+      preferenceFilter,
+      queryCraving,
+    });
+    res.json(result);
+  } catch (error: any) {
+    console.error("Smart Food Suggestions API Error:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "An error occurred while generating smart food suggestions.",
     });
   }
 });
