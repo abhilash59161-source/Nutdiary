@@ -1,0 +1,8 @@
+{
+  "name": "Food Tracker and Diet Planner",
+  "description": "A comprehensive dietary application to log food intake, search nutritional values, analyze food photos using AI, get personalized goal-based diet plans, and view specialized therapeutic diets for various health conditions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
